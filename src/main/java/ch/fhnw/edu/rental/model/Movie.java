@@ -10,14 +10,27 @@ public class Movie {
 	private boolean rented;
 	private PriceCategory priceCategory;
 
-	public Movie(String title, LocalDate releaseDate, PriceCategory priceCategory) throws NullPointerException {
+	public static Movie of(String title, LocalDate releaseDate, PriceCategory priceCategory) {
+	    return new Movie(null, title, releaseDate, false, priceCategory);
+    }
+
+    public static Movie of(String title, LocalDate releaseDate, Boolean rented, PriceCategory priceCategory) {
+        return new Movie(null, title, releaseDate, rented, priceCategory);
+    }
+
+    public Movie withId(Long id) {
+        return new Movie(id, this.title, this.releaseDate, this.rented, this.priceCategory);
+    }
+
+	private Movie(Long id, String title, LocalDate releaseDate, Boolean rented, PriceCategory priceCategory) throws NullPointerException {
 		if ((title == null) || (releaseDate == null) || (priceCategory == null)) {
 			throw new NullPointerException("not all input parameters are set!");
 		}
+		this.id = id;
 		this.title = title;
 		this.releaseDate = releaseDate;
-		this.priceCategory = priceCategory;
-		this.rented = false;
+        this.rented = rented;
+        this.priceCategory = priceCategory;
 	}
 	
 	public PriceCategory getPriceCategory() {

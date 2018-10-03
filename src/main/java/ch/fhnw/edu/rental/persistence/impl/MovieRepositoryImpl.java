@@ -1,14 +1,16 @@
 package ch.fhnw.edu.rental.persistence.impl;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.Month;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Component;
 
 import ch.fhnw.edu.rental.model.Movie;
@@ -17,80 +19,99 @@ import ch.fhnw.edu.rental.persistence.PriceCategoryRepository;
 
 @Component
 public class MovieRepositoryImpl implements MovieRepository {
-	private Map<Long, Movie> data = new HashMap<Long, Movie>();
-	private long nextId = 1;
 
-	@Autowired
-	private PriceCategoryRepository priceCategoryRepo;
-	
-	@SuppressWarnings("unused")
-	private void initData () {
-		data.clear();
-		nextId = 1;
-		
-		save(new Movie("Marie Curie", LocalDate.of(2017, Month.JUNE, 2), priceCategoryRepo.findById(1L).get()));
-		save(new Movie("Curchill", LocalDate.of(2017, Month.SEPTEMBER, 20), priceCategoryRepo.findById(1L).get()));
-		save(new Movie("The Boss Baby", LocalDate.of(2017, Month.AUGUST, 3), priceCategoryRepo.findById(2L).get()));
-		save(new Movie("Pirates of the Caribean: Salazar's Revenge", LocalDate.of(2017, Month.OCTOBER, 2), priceCategoryRepo.findById(3L).get()));
-		save(new Movie("Die göttliche Ordnung", LocalDate.of(2017, Month.SEPTEMBER, 21), priceCategoryRepo.findById(1L).get()));
+    private final JdbcTemplate jdbcTemplate;
+    private final PriceCategoryRepository priceCategoryRepo;
 
-		save(new Movie("Loving Vincent", LocalDate.of(2018, Month.MAY, 25), priceCategoryRepo.findById(1L).get()));
-		save(new Movie("Fast & Furious 7", LocalDate.of(2018, Month.AUGUST, 13), priceCategoryRepo.findById(3L).get()));
-		save(new Movie("Momo", LocalDate.of(2018, Month.OCTOBER, 1), priceCategoryRepo.findById(3L).get()));
-		save(new Movie("Swimming with Men", LocalDate.of(2018, Month.OCTOBER, 3), priceCategoryRepo.findById(3L).get()));
-		save(new Movie("Jurassic World", LocalDate.of(2018, Month.OCTOBER, 22), priceCategoryRepo.findById(3L).get()));
-}
-	
-	@Override
-	public Optional<Movie> findById(Long id) {
-		if(id == null) throw new IllegalArgumentException();
-		return Optional.ofNullable(data.get(id));
-	}
+    public MovieRepositoryImpl(JdbcTemplate jdbcTemplate, PriceCategoryRepository priceCategoryRepo) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.priceCategoryRepo = priceCategoryRepo;
+    }
 
-	@Override
-	public List<Movie> findAll() {
-		return new ArrayList<Movie>(data.values());
-	}
+    @Override
+    public Optional<Movie> findById(Long id) {
 
-	@Override
-	public List<Movie> findByTitle(String name) {
-		List<Movie> result = new ArrayList<Movie>();
-		for(Movie m : data.values()){
-			if(m.getTitle().equals(name)) result.add(m);
-		}
-		return result;
-	}
+        List<Movie> movies = jdbcTemplate.query(
+            "select * from MOVIES where MOVIE_ID = ?",
+            (rs, row) -> createMovie(rs),
+            id
+        );
 
-	@Override
-	public Movie save(Movie movie) {
-		if (movie.getId() == null)
-			movie.setId(nextId++);
-		data.put(movie.getId(), movie);
-		return movie;
-	}
+        if (movies.size() == 0) {
+            return Optional.empty();
+        } else if (movies.size() > 1) {
+            throw new IllegalStateException("Multiple movies have the same id");
+        } else {
+            return Optional.of(movies.get(0));
+        }
+    }
 
-	@Override
-	public void delete(Movie movie) {
-		if(movie == null) throw new IllegalArgumentException();
-		data.remove(movie.getId());
-		movie.setId(null);
-	}
+    @Override
+    public List<Movie> findAll() {
+        return jdbcTemplate.query(
+            "select * from MOVIES",
+            (rs, row) -> createMovie(rs)
+        );
+    }
 
-	@Override
-	public void deleteById(Long id) {
-		if(id == null) throw new IllegalArgumentException();
-		findById(id).ifPresent(e -> delete(e));
-	}
+    @Override
+    public List<Movie> findByTitle(String name) {
+        return jdbcTemplate.query(
+            "select * from MOVIES where MOVIE_TITLE = ?",
+            (rs, row) -> createMovie(rs),
+            name
+        );
+    }
 
-	@Override
-	public boolean existsById(Long id) {
-		if(id == null) throw new IllegalArgumentException();
-		return data.get(id) != null;
-	}
+    private Movie createMovie(ResultSet rs) throws SQLException {
+        long priceCategoryId = rs.getLong("PRICECATEGORY_FK");
+        return Movie.of(
+                rs.getString("MOVIE_TITLE"),
+                rs.getDate("MOVIE_RELEASEDATE").toLocalDate(),
+                rs.getBoolean("MOVIE_RENTED"),
+                priceCategoryRepo.findById(priceCategoryId).get())
+            .withId(rs.getLong("MOVIE_ID"));
+    }
 
-	@Override
-	public long count() {
-		return data.size();
-	}
+    @Override
+    public Movie save(Movie movie) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        String INSERT_SQL = "insert into movies (movie_releasedate, movie_title, movie_rented, pricecategory_fk) values (?, ?, ?, ?, ?)";
+        jdbcTemplate.update(
+            connection -> {
+                PreparedStatement ps =
+                    connection.prepareStatement(INSERT_SQL, new String[] {"MOVIE_ID"});
+                ps.setDate(1, java.sql.Date.valueOf(movie.getReleaseDate()));
+                ps.setString(2, movie.getTitle());
+                return ps;
+            },
+            keyHolder);
+        return movie.withId(Objects.requireNonNull(keyHolder.getKey()).longValue());
+    }
+
+    @Override
+    public void delete(Movie movie) {
+        if (movie == null) throw new IllegalArgumentException();
+        jdbcTemplate.update(
+            "delete from MOVIES where MOVIE_ID = ?",
+            movie.getId()
+        );
+    }
+
+    @Override
+    public void deleteById(Long id) {
+        if (id == null) throw new IllegalArgumentException();
+        findById(id).ifPresent(this::delete);
+    }
+
+    @Override
+    public boolean existsById(Long id) {
+        return findById(id).isPresent();
+    }
+
+    @Override
+    public long count() {
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM MOVIES", Long.class);
+    }
 
 }

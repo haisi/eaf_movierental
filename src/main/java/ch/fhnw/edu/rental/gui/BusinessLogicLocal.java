@@ -95,7 +95,7 @@ public class BusinessLogicLocal implements BusinessLogic {
 		Movie movie = null;
 		for(PriceCategory pc : movieService.getAllPriceCategories()){
 			if(pc.toString().equals(category)){
-				movie = new Movie(movieTitle, date, pc);
+				movie = Movie.of(movieTitle, date, pc);
 			}
 		}
 		movie = movieService.saveMovie(movie);
@@ -108,7 +108,7 @@ public class BusinessLogicLocal implements BusinessLogic {
 		Movie orig = movieService.getMovieById(movieId);
 		for(PriceCategory pc : movieService.getAllPriceCategories()){
 			if(pc.toString().equals(category)){
-				movie = new Movie(movieTitle, date, pc);
+				movie = Movie.of(movieTitle, date, pc);
 			}
 		}
 		movie.setId(movieId);

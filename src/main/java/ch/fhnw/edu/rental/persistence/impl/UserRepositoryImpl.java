@@ -1,12 +1,19 @@
 package ch.fhnw.edu.rental.persistence.impl;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import ch.fhnw.edu.rental.model.Movie;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Component;
 
 import ch.fhnw.edu.rental.model.Rental;
@@ -16,43 +23,71 @@ import ch.fhnw.edu.rental.persistence.UserRepository;
 
 @Component
 public class UserRepositoryImpl implements UserRepository {
-	private Map<Long,User> data = new HashMap<Long,User>();
-	private long nextId = 1;
-	
-	@Autowired
-	private RentalRepository rentalRepo;
-	
-	@SuppressWarnings("unused")
-	private void initData () {
-		data.clear();
-		nextId = 1;
-		save(new User("Keller", "Marc"));
-		save(new User("Knecht", "Werner"));
-		save(new User("Meyer", "Barbara"));
-		save(new User("Kummer", "Adolf"));
-		
-		findById(1L).get().setEmail("marc.keller@gmail.com");
-		findById(2L).get().setEmail("werner.knecht@gmail.com");
-		findById(3L).get().setEmail("barbara.meyer@gmail.com");
-		findById(4L).get().setEmail("adolf.kummer@gmail.com");
-	}
 
-	@Override
+    private final JdbcTemplate jdbcTemplate;
+	private final RentalRepository rentalRepo;
+
+    public UserRepositoryImpl(JdbcTemplate jdbcTemplate, @Lazy RentalRepository rentalRepo) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.rentalRepo = rentalRepo;
+    }
+
+    @Override
 	public Optional<User> findById(Long id) {
-		if(id == null) throw new IllegalArgumentException();
-		return Optional.ofNullable(data.get(id));
+        List<User> rental = jdbcTemplate.query(
+            "select * from USERS where USER_ID = ?",
+            (rs, row) -> createUser(rs),
+            id
+        );
+
+        if (rental.size() == 0) {
+            return Optional.empty();
+        } else if (rental.size() > 1) {
+            throw new IllegalStateException("Multiple rental have the same id");
+        } else {
+            return Optional.of(rental.get(0));
+        }
 	}
 
-	@Override
+    private User createUser(ResultSet rs) throws SQLException {
+
+        long id = rs.getLong("USER_ID");
+        String email = rs.getString("USER_EMAIL");
+        String firstName = rs.getString("USER_FIRSTNAME");
+        String userName = rs.getString("USER_NAME");
+
+        User user = new User(userName, firstName);
+        user.setEmail(email);
+        user.setId(id);
+        user.setRentals(rentalRepo.findByUser(user));
+
+        return user;
+    }
+
+    @Override
 	public List<User> findAll() {
-		return new ArrayList<User>(data.values());
+        return jdbcTemplate.query(
+            "select * from USERS",
+            (rs, row) -> createUser(rs)
+        );
 	}
 
 	@Override
 	public User save(User user) {
-		if (user.getId() == null)
-			user.setId(nextId++);
-		data.put(user.getId(), user);
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        String INSERT_SQL = "insert into users (user_name, user_firstname, user_email) values (?, ?, ?);";
+        jdbcTemplate.update(
+            connection -> {
+                PreparedStatement ps =
+                    connection.prepareStatement(INSERT_SQL, new String[] {"rental_id"});
+                ps.setString(1, user.getLastName());
+                ps.setString(2, user.getFirstName());
+                ps.setString(3, user.getEmail());
+                return ps;
+            },
+            keyHolder);
+
+        user.setId(Objects.requireNonNull(keyHolder.getKey()).longValue());
 		return user;
 	}
 
@@ -62,52 +97,57 @@ public class UserRepositoryImpl implements UserRepository {
 		for(Rental r : user.getRentals()){
 			rentalRepo.delete(r);
 		}
-		data.remove(user.getId());
-		user.setId(null);
+        jdbcTemplate.update(
+            "delete from USERS where USER_ID = ?",
+            user.getId()
+        );
 	}
 
 	@Override
 	public void deleteById(Long id) {
 		if(id == null) throw new IllegalArgumentException();
-		findById(id).ifPresent(e -> delete(e));
+		findById(id).ifPresent(this::delete);
 	}
 
 	@Override
 	public boolean existsById(Long id) {
 		if(id == null) throw new IllegalArgumentException();
-		return data.get(id) != null;
+        return findById(id).isPresent();
 	}
 
 	@Override
 	public long count() {
-		return data.size();
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM USERS", Long.class);
 	}
 
 	@Override
 	public List<User> findByLastName(String lastName) {
-		List<User> result = new ArrayList<>();
-		for(User u : data.values()){
-			if(u.getLastName().equals(lastName)) result.add(u);
-		}
-		return result;
+        if (lastName == null || lastName.isEmpty()) {
+            throw new IllegalArgumentException("No empty name");
+        }
+		// TODO use SQL
+        return findAll().stream()
+            .filter(user -> lastName.equals(user.getLastName())).collect(Collectors.toList());
 	}
 
 	@Override
 	public List<User> findByFirstName(String firstName) {
-		List<User> result = new ArrayList<>();
-		for(User u : data.values()){
-			if(u.getFirstName().equals(firstName)) result.add(u);
-		}
-		return result;
+        if (firstName == null || firstName.isEmpty()) {
+            throw new IllegalArgumentException("No empty firstName");
+        }
+        // TODO use SQL
+        return findAll().stream()
+            .filter(user -> firstName.equals(user.getFirstName())).collect(Collectors.toList());
 	}
 
 	@Override
 	public List<User> findByEmail(String email) {
-		List<User> result = new ArrayList<>();
-		for(User u : data.values()){
-			if(u.getEmail().equals(email)) result.add(u);
-		}
-		return result;
+        if (email == null || email.isEmpty()) {
+            throw new IllegalArgumentException("No empty mail");
+        }
+        // TODO use SQL
+        return findAll().stream()
+            .filter(user -> email.equals(user.getEmail())).collect(Collectors.toList());
 	}
 
 }

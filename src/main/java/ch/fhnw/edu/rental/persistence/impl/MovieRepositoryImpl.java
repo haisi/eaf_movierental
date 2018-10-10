@@ -115,6 +115,8 @@ public class MovieRepositoryImpl implements MovieRepository {
             "delete from MOVIES where MOVIE_ID = ?",
             movie.getId()
         );
+
+        movie.setId(null);
     }
 
     @Override

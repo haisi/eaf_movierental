@@ -76,13 +76,22 @@ public class MovieRepositoryImpl implements MovieRepository {
     @Override
     public Movie save(Movie movie) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
-        String INSERT_SQL = "insert into movies (movie_releasedate, movie_title, movie_rented, pricecategory_fk) values (?, ?, ?, ?, ?)";
+
+        final String INSERT_SQL;
+        if (movie.getId() == null) {
+            INSERT_SQL = "insert into movies (movie_releasedate, movie_title, movie_rented, pricecategory_fk) values (?, ?, ?, ?)";
+        } else {
+            INSERT_SQL = "insert into movies (movie_releasedate, movie_title, movie_rented, pricecategory_fk) values (?, ?, ?, ?)";
+        }
+
         jdbcTemplate.update(
             connection -> {
                 PreparedStatement ps =
                     connection.prepareStatement(INSERT_SQL, new String[] {"MOVIE_ID"});
                 ps.setDate(1, java.sql.Date.valueOf(movie.getReleaseDate()));
                 ps.setString(2, movie.getTitle());
+                ps.setBoolean(3, movie.isRented());
+                ps.setLong(4, movie.getPriceCategory().getId());
                 return ps;
             },
             keyHolder);

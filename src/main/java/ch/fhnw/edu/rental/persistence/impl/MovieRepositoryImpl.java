@@ -81,7 +81,7 @@ public class MovieRepositoryImpl implements MovieRepository {
         if (movie.getId() == null) {
             INSERT_SQL = "insert into movies (movie_releasedate, movie_title, movie_rented, pricecategory_fk) values (?, ?, ?, ?)";
         } else {
-            INSERT_SQL = "insert into movies (movie_releasedate, movie_title, movie_rented, pricecategory_fk) values (?, ?, ?, ?)";
+            INSERT_SQL = "update movies set movie_releasedate = ?, movie_title = ?, movie_rented = ?, pricecategory_fk = ? where MOVIE_ID = ?";
         }
 
         jdbcTemplate.update(
@@ -92,10 +92,20 @@ public class MovieRepositoryImpl implements MovieRepository {
                 ps.setString(2, movie.getTitle());
                 ps.setBoolean(3, movie.isRented());
                 ps.setLong(4, movie.getPriceCategory().getId());
+
+                if (movie.getId() != null) {
+                    ps.setLong(5, movie.getId());
+                }
+
                 return ps;
             },
             keyHolder);
-        return movie.withId(Objects.requireNonNull(keyHolder.getKey()).longValue());
+
+        if (movie.getId() == null) {
+            return movie.withId(Objects.requireNonNull(keyHolder.getKey()).longValue());
+        } else {
+            return movie;
+        }
     }
 
     @Override

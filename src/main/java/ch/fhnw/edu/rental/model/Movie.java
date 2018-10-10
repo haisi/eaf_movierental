@@ -1,6 +1,7 @@
 package ch.fhnw.edu.rental.model;
 
 import java.time.LocalDate;
+import java.util.Objects;
 
 public class Movie {
 	private Long id;
@@ -65,4 +66,28 @@ public class Movie {
 		this.id = id;
 	}
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Movie movie = (Movie) o;
+        return rented == movie.rented &&
+            Objects.equals(id, movie.id) &&
+            Objects.equals(title, movie.title);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, title, rented);
+    }
+
+    @Override
+    public String toString() {
+        return "Movie{" +
+            "id=" + id +
+            ", title='" + title + '\'' +
+            ", releaseDate=" + releaseDate +
+            ", rented=" + rented +
+            '}';
+    }
 }

@@ -70,7 +70,7 @@ public class MovieServiceTest {
 		PriceCategory category = categories.get(2);
 		assertTrue(category instanceof PriceCategoryNewRelease);
 
-		Movie movie = new Movie("testMovie", LocalDate.now(), category);
+		Movie movie = Movie.of("testMovie", LocalDate.now(), category);
 		movie = movieService.saveMovie(movie);
 
 		movies = movieService.getAllMovies();
@@ -83,7 +83,7 @@ public class MovieServiceTest {
 		assertEquals(3, categories.size());
 
 		PriceCategory category = categories.get(1);
-		Movie movie = new Movie("testMovie", LocalDate.now(), category);
+		Movie movie = Movie.of("testMovie", LocalDate.now(), category);
 
 		assertTrue(movie.getId() == null);
 		movie = movieService.saveMovie(movie);
